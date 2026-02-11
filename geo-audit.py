@@ -226,6 +226,17 @@ def analyze_eeat(soup):
     
     return result
 
+# --- Módulo 5: Análise de Performance (Tamanho da Página) ---
+def analyze_page_size(response):
+    """Calcula o tamanho da página em MB."""
+    size_bytes = len(response.content)
+    size_mb = size_bytes / (1024 * 1024)
+    
+    return {
+        "size_mb": round(size_mb, 2),
+        "is_under_limit": size_mb <= 2.0
+    }
+
 # --- Orquestrador ---
 def calculate_geo_score(robots, structure, schema, eeat):
     # Pesos Arbitrários para compor o GEO Score (0-100)
@@ -249,9 +260,13 @@ def calculate_geo_score(robots, structure, schema, eeat):
     final_score = (s_robots * w_robots) + (s_struct * w_struct) + (s_schema * w_schema) + (s_eeat * w_eeat)
     return round(final_score, 1)
 
-def generate_recommendations(robots, structure, schema, eeat):
+def generate_recommendations(robots, structure, schema, eeat, page_size):
     recs = []
     
+    # Page Size
+    if not page_size["is_under_limit"]:
+        recs.append(f"CRÍTICO: O tamanho da página ({page_size['size_mb']}MB) excede o limite recomendado de 2MB. Páginas muito grandes dificultam a análise por mecanismos de IA.")
+
     # Robots
     blocked = [k for k,v in robots.get("details", {}).items() if not v]
     if blocked:
@@ -302,15 +317,20 @@ def print_cli_report(data):
 
     url = data['url']
     score = data['geo_score']
+    page_size = data['details'].get('page_size', {})
     
     # Cabeçalho Principal
     print(f"\n{Colors.BOLD}{Colors.CYAN}🔎 RELATÓRIO DE GEO (Generative Engine Optimization){Colors.ENDC}")
     print(f"🔗 Alvo: {Colors.UNDERLINE}{url}{Colors.ENDC}")
     print(f"📅 Data: {data['timestamp']}")
     
-    # Score
+    # Score & Size
     score_color = Colors.GREEN if score >= 80 else (Colors.WARNING if score >= 50 else Colors.FAIL)
     print(f"\n{Colors.BOLD}🏆 GEO SCORE GERAL: {score_color}{score}/100{Colors.ENDC}")
+    
+    if page_size:
+        size_color = Colors.GREEN if page_size['is_under_limit'] else Colors.FAIL
+        print(f"{Colors.BOLD}📦 TAMANHO DA PÁGINA: {size_color}{page_size['size_mb']} MB{Colors.ENDC}")
 
     # 1. Acesso (Bots)
     header("1. Acesso de Robôs (robots.txt)")
@@ -386,10 +406,11 @@ def main():
     struct_res = analyze_structure(soup)
     schema_res = analyze_schema(soup)
     eeat_res = analyze_eeat(soup)
+    size_res = analyze_page_size(response)
     
     # Score Final
     geo_score = calculate_geo_score(robots_res, struct_res, schema_res, eeat_res)
-    recommendations = generate_recommendations(robots_res, struct_res, schema_res, eeat_res)
+    recommendations = generate_recommendations(robots_res, struct_res, schema_res, eeat_res, size_res)
     
     output = {
         "url": url,
@@ -399,7 +420,8 @@ def main():
             "access": robots_res,
             "structure": struct_res,
             "schema": schema_res,
-            "eeat": eeat_res
+            "eeat": eeat_res,
+            "page_size": size_res
         },
         "prioritized_recommendations": recommendations
     }
