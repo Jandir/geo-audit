@@ -302,7 +302,7 @@ def check_site_authority(url):
     """Extrai informações de autoridade via Scrapingdog API."""
     api_key = os.environ.get('SCRAPINGDOG_API_KEY')
     if not api_key:
-        return {"error": "SCRAPINGDOG_API_KEY não encontrada no arquivo .env"}
+        return {"disabled": True}
 
     parsed_url = urlparse(url)
     domain = parsed_url.netloc
@@ -357,7 +357,9 @@ def generate_recommendations(robots, structure, schema, eeat, page_size, authori
     recs = []
     
     # Authority
-    if 'error' in authority:
+    if authority.get('disabled'):
+        pass # Autoridade ignorada se chave não estiver presente
+    elif 'error' in authority:
         recs.append(f"AVISO: Não foi possível verificar autoridade: {authority['error']}")
     elif authority.get('indexed_pages', 0) < 10:
         recs.append("Baixo número de páginas indexadas. Aumente a produção de conteúdo para ganhar autoridade perante a IA.")
@@ -471,14 +473,15 @@ def print_cli_report(data):
     print(f"   • Citações Externas    : {eeat['citation_count']} links")
 
     # 5. Autoridade
-    header("5. Autoridade do Site (Scrapingdog)")
     auth = data['details']['authority']
-    if 'error' in auth:
-        print(f"   {Colors.WARNING}⚠️  {auth['error']}{Colors.ENDC}")
-    else:
-        print(f"   • Domínio              : {auth['domain']}")
-        print(f"   • Páginas Indexadas    : {auth['indexed_pages']:,}")
-        print(f"   • Resultados no Topo   : {auth['top_results_count']} (Amostra da 1ª página)")
+    if not auth.get('disabled'):
+        header("5. Autoridade do Site (Scrapingdog)")
+        if 'error' in auth:
+            print(f"   {Colors.WARNING}⚠️  {auth['error']}{Colors.ENDC}")
+        else:
+            print(f"   • Domínio              : {auth['domain']}")
+            print(f"   • Páginas Indexadas    : {auth['indexed_pages']:,}")
+            print(f"   • Resultados no Topo   : {auth['top_results_count']} (Amostra da 1ª página)")
 
     # Recomendações
     print(f"\n{Colors.BOLD}{Colors.WARNING}🔧 RECOMENDAÇÕES PRIORITÁRIAS:{Colors.ENDC}")
