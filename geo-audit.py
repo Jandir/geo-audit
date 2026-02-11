@@ -1,4 +1,23 @@
-#!/Users/jandirp/scripts/.venv/bin/python3
+#!/usr/bin/env python3
+"""
+GEO Audit Tool - Otimização para Mecanismos de Resposta Generativa (GEO)
+----------------------------------------------------------------------
+Este script realiza uma auditoria técnica em sites para avaliar sua 
+preparação para serem citados por IAs (como ChatGPT, Claude, Gemini).
+
+Módulos de Análise:
+1. Acesso por Bots: Verifica permissões no robots.txt para bots de IA.
+2. Estrutura Semântica: Valida hierarquia de headers e cápsulas de resposta.
+3. Schema.org: Detecta marcações estruturadas (FAQ, Article, Product).
+4. E-E-A-T: Analisa sinais de Experiência, Especialidade, Autoridade e Confiança.
+5. Tamanho da Página: Alerta sobre páginas muito pesadas para análise de IA.
+6. Autoridade (Google): Mede autoridade via páginas indexadas (Scrapingdog).
+
+Uso:
+    python3 geo-audit.py https://exemplo.com.br
+"""
+
+import os
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -8,10 +27,27 @@ import json
 import re
 from datetime import datetime, timedelta
 
+# --- Versão ---
+VERSION = "1.2.0"
+
 # --- Configuração ---
 USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/1.0)'
-TIMEOUT_SECONDS = 5
+TIMEOUT_SECONDS = 15 # Aumentado para lidar com APIs externas
 MAX_RETRIES = 2
+
+def load_env():
+    """Carrega variáveis de ambiente de um arquivo .env manual para evitar dependências extras."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key.strip()] = value.strip().strip('"').strip("'")
+
+load_env()
 
 def get_page_content(url):
     """Realiza a requisição HTTP com timeout e retry simples."""
@@ -257,12 +293,75 @@ def calculate_geo_score(robots, structure, schema, eeat):
     s_schema = schema["score_part"]
     s_eeat = eeat["score_part"]
     
+    # Authority Score part (Bônus ou impacto)
     final_score = (s_robots * w_robots) + (s_struct * w_struct) + (s_schema * w_schema) + (s_eeat * w_eeat)
     return round(final_score, 1)
 
-def generate_recommendations(robots, structure, schema, eeat, page_size):
+# --- Módulo 6: Autoridade do Site (Scrapingdog) ---
+def check_site_authority(url):
+    """Extrai informações de autoridade via Scrapingdog API."""
+    api_key = os.environ.get('SCRAPINGDOG_API_KEY')
+    if not api_key:
+        return {"error": "SCRAPINGDOG_API_KEY não encontrada no arquivo .env"}
+
+    parsed_url = urlparse(url)
+    domain = parsed_url.netloc
+    if domain.startswith('www.'):
+        domain = domain[4:]
+
+    query = f"site:{domain}"
+    
+    # Parâmetros de localização para domínios .br ou gerais
+    google_domain = "google.com.br" if domain.endswith('.br') else "google.com"
+    country = "br" if domain.endswith('.br') else "us"
+    
+    api_url = (
+        f"https://api.scrapingdog.com/google/?"
+        f"api_key={api_key}&query={query}&google_domain={google_domain}"
+        f"&country={country}&advance_search=true"
+    )
+    
+    try:
+        response = requests.get(api_url, timeout=TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        
+        # O Scrapingdog retorna informações em search_information ou meta_data
+        search_info = data.get('search_information', {})
+        total_results = search_info.get('total_results')
+        
+        # Simular "keywords no topo" e fallback para total_results
+        organic = data.get('organic_results', [])
+        top_results_count = len(organic)
+
+        if total_results is None or total_results == 0:
+            # Fallback 1: Verificar meta_data
+            meta = data.get('meta_data', {})
+            total_results = meta.get('total_results')
+            
+            # Fallback 2: Se ainda for 0 mas houver resultados orgânicos, usamos o count local
+            if (total_results is None or total_results == 0) and top_results_count > 0:
+                total_results = top_results_count
+            elif total_results is None:
+                total_results = 0
+
+        return {
+            "indexed_pages": total_results,
+            "top_results_count": top_results_count,
+            "domain": domain
+        }
+    except Exception as e:
+        return {"error": f"Erro na API Scrapingdog: {str(e)}"}
+
+def generate_recommendations(robots, structure, schema, eeat, page_size, authority):
     recs = []
     
+    # Authority
+    if 'error' in authority:
+        recs.append(f"AVISO: Não foi possível verificar autoridade: {authority['error']}")
+    elif authority.get('indexed_pages', 0) < 10:
+        recs.append("Baixo número de páginas indexadas. Aumente a produção de conteúdo para ganhar autoridade perante a IA.")
+
     # Page Size
     if not page_size["is_under_limit"]:
         recs.append(f"CRÍTICO: O tamanho da página ({page_size['size_mb']}MB) excede o limite recomendado de 2MB. Páginas muito grandes dificultam a análise por mecanismos de IA.")
@@ -320,7 +419,7 @@ def print_cli_report(data):
     page_size = data['details'].get('page_size', {})
     
     # Cabeçalho Principal
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🔎 RELATÓRIO DE GEO (Generative Engine Optimization){Colors.ENDC}")
+    print(f"\n{Colors.BOLD}{Colors.CYAN}🔎 RELATÓRIO DE GEO (Generative Engine Optimization) v{VERSION}{Colors.ENDC}")
     print(f"🔗 Alvo: {Colors.UNDERLINE}{url}{Colors.ENDC}")
     print(f"📅 Data: {data['timestamp']}")
     
@@ -371,6 +470,16 @@ def print_cli_report(data):
     print(f"   • Densidade Estatística: {eeat['stats_density']} dados (números/%)")
     print(f"   • Citações Externas    : {eeat['citation_count']} links")
 
+    # 5. Autoridade
+    header("5. Autoridade do Site (Scrapingdog)")
+    auth = data['details']['authority']
+    if 'error' in auth:
+        print(f"   {Colors.WARNING}⚠️  {auth['error']}{Colors.ENDC}")
+    else:
+        print(f"   • Domínio              : {auth['domain']}")
+        print(f"   • Páginas Indexadas    : {auth['indexed_pages']:,}")
+        print(f"   • Resultados no Topo   : {auth['top_results_count']} (Amostra da 1ª página)")
+
     # Recomendações
     print(f"\n{Colors.BOLD}{Colors.WARNING}🔧 RECOMENDAÇÕES PRIORITÁRIAS:{Colors.ENDC}")
     if not data['prioritized_recommendations']:
@@ -382,9 +491,13 @@ def print_cli_report(data):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='Auditoria GEO para Sites')
+    parser = argparse.ArgumentParser(
+        description='🚀 GEO Audit Tool - Auditoria de Otimização para mecanismos de resposta por IA.',
+        epilog='Exemplo: python3 geo-audit.py https://netexperts.com.br'
+    )
     parser.add_argument('url', help='URL do site para analisar')
-    parser.add_argument('--json', action='store_true', help='Output em formato JSON puro')
+    parser.add_argument('--json', action='store_true', help='Output em formato JSON puro para integrações')
+    parser.add_argument('-v','--versao', '--version', action='version', version=f'%(prog)s {VERSION}')
     args = parser.parse_args()
 
     url = args.url
@@ -407,10 +520,11 @@ def main():
     schema_res = analyze_schema(soup)
     eeat_res = analyze_eeat(soup)
     size_res = analyze_page_size(response)
+    auth_res = check_site_authority(url)
     
     # Score Final
     geo_score = calculate_geo_score(robots_res, struct_res, schema_res, eeat_res)
-    recommendations = generate_recommendations(robots_res, struct_res, schema_res, eeat_res, size_res)
+    recommendations = generate_recommendations(robots_res, struct_res, schema_res, eeat_res, size_res, auth_res)
     
     output = {
         "url": url,
@@ -421,7 +535,8 @@ def main():
             "structure": struct_res,
             "schema": schema_res,
             "eeat": eeat_res,
-            "page_size": size_res
+            "page_size": size_res,
+            "authority": auth_res
         },
         "prioritized_recommendations": recommendations
     }
