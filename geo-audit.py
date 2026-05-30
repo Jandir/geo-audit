@@ -22,7 +22,6 @@ Uso:
 
 
 import os                    # Interação com o sistema operacional (arquivos, variáveis de ambiente)
-import sys                   # Acesso a parâmetros e configurações do interpretador Python
 import asyncio               # Framework para programação assíncrona (concorrência e I/O não bloqueante)
 import aiohttp              # Cliente HTTP assíncrono para realizar requisições de alta performance
 import urllib.robotparser    # Parser nativo para interpretar regras do arquivo robots.txt
@@ -30,7 +29,7 @@ import json                  # Manipulação de dados (serialização/deserializ
 import re                    # Expressões Regulares para busca e manipulação avançada de texto
 from datetime import datetime # Manipulação de datas e horários (timestamps, comparações de tempo)
 from urllib.parse import urlparse, urljoin  # Parse (análise) e manipulação segura de URLs
-from typing import Dict, Any, List, Optional, Tuple # Tipagem estática para melhor documentação e suporte de IDE
+from typing import Dict, Any, Optional # Tipagem estática para melhor documentação e suporte de IDE
 
 from collections import Counter # Estruturas de dados especializadas (utilizado para contagem de frequências)
 
