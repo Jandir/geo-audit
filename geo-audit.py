@@ -534,10 +534,10 @@ async def analyze_url(url: str):
     
     # 2. Executar Módulos em Paralelo onde possível
     # Robots
-    task_robots = check_robots_txt(url)
+    task_robots = asyncio.create_task(check_robots_txt(url))
     
     # Authority (Scrapingdog)
-    task_auth = check_authority_async(url)
+    task_auth = asyncio.create_task(check_authority_async(url))
     
     # Link Checker (precisa de session prória)
     async with aiohttp.ClientSession() as session:
