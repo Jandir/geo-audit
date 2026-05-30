@@ -1,0 +1,3 @@
+## 2025-05-18 - [Python asyncio Pitfall: Coroutines Not Scheduled]
+**Learning:** In Python `asyncio`, merely calling an async function like `task_robots = check_robots_txt(url)` returns a coroutine object but does NOT schedule it to run in the background. If you do blocking work or `await` other tasks before `await`ing this coroutine, it will run sequentially, nullifying any intended parallelism.
+**Action:** Always wrap background coroutines in `asyncio.create_task()` (or use `asyncio.gather()`) if you want them to run concurrently while other synchronous or asynchronous operations are performed.
