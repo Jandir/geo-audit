@@ -540,9 +540,18 @@ async def analyze_url(url: str):
     task_auth = asyncio.create_task(check_authority_async(url))
     
     # Link Checker (precisa de session prória)
-    async with aiohttp.ClientSession() as session:
-        link_audit_res = await audit_links_and_authority(soup, session, url)
+    async def run_link_audit():
+        async with aiohttp.ClientSession() as session:
+            return await audit_links_and_authority(soup, session, url)
+
+    task_links = asyncio.create_task(run_link_audit())
         
+    # Yield control to the event loop so that the async background tasks
+    # created above can start executing concurrently.
+    # Without this, the synchronous CPU-bound operations below would block the main thread
+    # before the tasks get a chance to start, rendering the asyncio.create_task() useless.
+    await asyncio.sleep(0)
+
     # Análises CPU-bound (BeautifulSoup/Spacy)
     # Teoricamente bloqueariam o loop, mas para scripts single-shot é aceitável não usar ProcessPool
     struct_res = analyze_structure_and_readability(soup)
@@ -552,6 +561,7 @@ async def analyze_url(url: str):
     
     robots_res = await task_robots
     auth_res = await task_auth
+    link_audit_res = await task_links
     
     # EEAT Básico (Mantido do anterior)
     eeat_res = analyze_eeat_basic(soup)
