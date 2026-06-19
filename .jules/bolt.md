@@ -1,6 +1,3 @@
-## 2025-05-18 - [Python asyncio Pitfall: Coroutines Not Scheduled]
-**Learning:** In Python `asyncio`, merely calling an async function like `task_robots = check_robots_txt(url)` returns a coroutine object but does NOT schedule it to run in the background. If you do blocking work or `await` other tasks before `await`ing this coroutine, it will run sequentially, nullifying any intended parallelism.
-**Action:** Always wrap background coroutines in `asyncio.create_task()` (or use `asyncio.gather()`) if you want them to run concurrently while other synchronous or asynchronous operations are performed.
-## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
-**Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
-**Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2026-06-19 - Lazy Loading Heavy Dependencies in CLI
+**Learning:** Top-level imports of heavy libraries like `textstat` and `google.generativeai` can drastically slow down CLI startup times, even for commands like `--help`. In `geo-audit.py`, removing these imports from the top level reduced startup time from ~2.6s to ~0.69s.
+**Action:** When working on CLI tools, always check for heavy imports at the top level and move them inside the specific functions where they are needed to keep startup times fast. Use `importlib.util.find_spec` if you need to check for module availability without fully importing it.
