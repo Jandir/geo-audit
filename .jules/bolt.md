@@ -4,3 +4,6 @@
 ## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
 **Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
 **Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2026-06-26 - [Python CLI Performance: Lazy Loading Dependencies]
+**Learning:** Global imports of heavy dependencies (like `google.generativeai` and `textstat`) significantly degrade the startup time of Python CLI scripts, even when just running simple commands like `--help`.
+**Action:** Always lazy-load heavy optional dependencies inside the specific functions that require them, and use `importlib.util.find_spec` to check for their availability without incurring the overhead of a full import.
