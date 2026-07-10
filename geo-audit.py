@@ -30,12 +30,12 @@ import re                    # Expressões Regulares para busca e manipulação 
 from datetime import datetime # Manipulação de datas e horários (timestamps, comparações de tempo)
 from urllib.parse import urlparse, urljoin  # Parse (análise) e manipulação segura de URLs
 from typing import Dict, Any, Optional # Tipagem estática para melhor documentação e suporte de IDE
+import importlib.util
 
 from collections import Counter # Estruturas de dados especializadas (utilizado para contagem de frequências)
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
 
 
 # --- Versão ---
@@ -46,17 +46,9 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
 
-
-# Tentar importar Google Generative AI
-HAS_GEMINI = False
-try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
-    pass
+# Verificar se pacotes pesados estão disponíveis
+HAS_TEXTSTAT = importlib.util.find_spec("textstat") is not None
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     """
@@ -64,10 +56,11 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     Requer a variável de ambiente GEMINI_API_KEY.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not HAS_GEMINI or not api_key:
+    if not api_key:
         return None
 
     try:
+        import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
 
@@ -245,7 +238,9 @@ def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
     # 3. Legibilidade (Flesch Reading Ease)
     # Extrair texto do main content seria ideal, mas usaremos do body limpo
     text_content = ' '.join([p.get_text() for p in soup.find_all('p')])
-    if text_content:
+    if text_content and HAS_TEXTSTAT:
+        import textstat
+        textstat.set_lang('pt')
         # textstat entende português +- bem para contar sílabas
         score = textstat.flesch_reading_ease(text_content)
         score_data["flesch_score"] = score
@@ -596,7 +591,7 @@ async def analyze_url(url: str):
     # 3. Análise Qualitativa via Gemini (se disponível)
     # Executada após ter todos os dados
     gemini_analysis = None
-    if HAS_GEMINI and os.environ.get("GEMINI_API_KEY"):
+    if os.environ.get("GEMINI_API_KEY"):
         print(f"🤖 Solicitando análise qualitativa ao Gemini (pode levar alguns segundos)...")
         # Pode ser feito síncrono aqui pois é a última etapa e depende de todos os dados
         try:
@@ -690,9 +685,12 @@ def generate_action_items(data):
     
     # 1. Robots
     robots = d['robots']
-    blocked = [k for k, v in robots['details'].items() if not v]
-    if blocked:
-        actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
+    if 'details' in robots:
+        blocked = [k for k, v in robots['details'].items() if not v]
+        if blocked:
+            actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
+    elif 'error' in robots:
+        actions.append(f"🤖 Erro no robots.txt: {robots['error']}")
         
     # 2. Structure
     st = d['structure']

@@ -4,3 +4,6 @@
 ## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
 **Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
 **Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2026-07-10 - [Lazy Loading Python Submodules using importlib]
+**Learning:** `importlib.util.find_spec('google.generativeai')` will crash with `ModuleNotFoundError` if the parent package `google` is missing, unlike top-level modules where it safely returns `None`.
+**Action:** When lazy-loading submodules, avoid `find_spec`. Instead, lazily load by putting the standard `try...except ImportError` import blocks directly inside the function where the dependency is used. This removes the need for global `HAS_*` flag checks completely and guarantees a safe startup without crashing.
