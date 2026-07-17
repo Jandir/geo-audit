@@ -4,3 +4,6 @@
 ## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
 **Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
 **Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2026-07-17 - [Python importlib.util.find_spec Pitfall: Dotted modules]
+**Learning:** `importlib.util.find_spec("namespace.module")` is not totally safe and isolated. If the base namespace package (`namespace` in this case) does not exist at all, Python's import machinery will throw a `ModuleNotFoundError` for the parent package when trying to resolve the spec.
+**Action:** Always wrap `importlib.util.find_spec` calls in `try...except ModuleNotFoundError` blocks, especially for dotted module paths, to prevent startup crashes when optional dependencies are missing.
