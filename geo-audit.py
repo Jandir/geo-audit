@@ -35,8 +35,7 @@ from collections import Counter # Estruturas de dados especializadas (utilizado 
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
-
+import importlib.util
 
 # --- Versão ---
 VERSION = "2.0.0"
@@ -46,17 +45,16 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
-
-
-# Tentar importar Google Generative AI
-HAS_GEMINI = False
+# Tentar importar Google Generative AI e textstat de forma segura
 try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
-    pass
+    HAS_GEMINI = importlib.util.find_spec("google.generativeai") is not None
+except ModuleNotFoundError:
+    HAS_GEMINI = False
+
+try:
+    HAS_TEXTSTAT = importlib.util.find_spec("textstat") is not None
+except ModuleNotFoundError:
+    HAS_TEXTSTAT = False
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     """
@@ -68,6 +66,7 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
         return None
 
     try:
+        import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
 
@@ -245,7 +244,9 @@ def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
     # 3. Legibilidade (Flesch Reading Ease)
     # Extrair texto do main content seria ideal, mas usaremos do body limpo
     text_content = ' '.join([p.get_text() for p in soup.find_all('p')])
-    if text_content:
+    if text_content and HAS_TEXTSTAT:
+        import textstat
+        textstat.set_lang('pt')
         # textstat entende português +- bem para contar sílabas
         score = textstat.flesch_reading_ease(text_content)
         score_data["flesch_score"] = score
@@ -690,7 +691,7 @@ def generate_action_items(data):
     
     # 1. Robots
     robots = d['robots']
-    blocked = [k for k, v in robots['details'].items() if not v]
+    blocked = [k for k, v in robots.get('details', {}).items() if not v]
     if blocked:
         actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
         
