@@ -4,3 +4,6 @@
 ## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
 **Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
 **Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2026-07-24 - [Python CLI Startup Optimization: Lazy Loading]
+**Learning:** In CLI tools like `geo-audit.py`, top-level imports of heavy libraries (e.g., `google.generativeai`, `textstat`, `spacy`) drastically increase startup time (from ~0.5s to ~2.2s), even if the user just asks for the help menu (`-h`).
+**Action:** Always lazy-load heavy dependencies by putting `import <module>` inside the specific functions that actually use them. Use `importlib.util.find_spec("module")` (wrapped in a `try...except ModuleNotFoundError`) to do fast boolean capability checks without incurring import costs.
