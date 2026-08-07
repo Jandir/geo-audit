@@ -35,8 +35,7 @@ from collections import Counter # Estruturas de dados especializadas (utilizado 
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
-
+import importlib.util
 
 # --- Versão ---
 VERSION = "2.0.0"
@@ -46,16 +45,12 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
-
-
-# Tentar importar Google Generative AI
+# Tentar importar Google Generative AI de forma preguiçosa
 HAS_GEMINI = False
 try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
+    if importlib.util.find_spec("google.generativeai") is not None:
+        HAS_GEMINI = True
+except ModuleNotFoundError:
     pass
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
@@ -66,6 +61,8 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not HAS_GEMINI or not api_key:
         return None
+
+    import google.generativeai as genai
 
     try:
         genai.configure(api_key=api_key)
@@ -177,6 +174,9 @@ async def check_robots_txt(url: str) -> Dict[str, Any]:
 # --- Módulo 2: Estrutura Semântica e Legibilidade ---
 
 def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
+    import textstat
+    textstat.set_lang('pt')
+
     score_data = {
         "hierarchy_score": 0,
         "hierarchy_issues": [],
@@ -690,7 +690,7 @@ def generate_action_items(data):
     
     # 1. Robots
     robots = d['robots']
-    blocked = [k for k, v in robots['details'].items() if not v]
+    blocked = [k for k, v in robots.get('details', {}).items() if not v]
     if blocked:
         actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
         
