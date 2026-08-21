@@ -35,7 +35,6 @@ from collections import Counter # Estruturas de dados especializadas (utilizado 
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
 
 
 # --- Versão ---
@@ -46,16 +45,14 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
-
 
 # Tentar importar Google Generative AI
+import importlib.util
 HAS_GEMINI = False
 try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
+    if importlib.util.find_spec("google.generativeai") is not None:
+        HAS_GEMINI = True
+except ModuleNotFoundError:
     pass
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
@@ -68,6 +65,7 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
         return None
 
     try:
+        import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
 
@@ -246,6 +244,8 @@ def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
     # Extrair texto do main content seria ideal, mas usaremos do body limpo
     text_content = ' '.join([p.get_text() for p in soup.find_all('p')])
     if text_content:
+        import textstat
+        textstat.set_lang('pt')
         # textstat entende português +- bem para contar sílabas
         score = textstat.flesch_reading_ease(text_content)
         score_data["flesch_score"] = score
