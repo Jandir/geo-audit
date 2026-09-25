@@ -27,6 +27,7 @@ import aiohttp              # Cliente HTTP assíncrono para realizar requisiçõ
 import urllib.robotparser    # Parser nativo para interpretar regras do arquivo robots.txt
 import json                  # Manipulação de dados (serialização/deserialização) no formato JSON
 import re                    # Expressões Regulares para busca e manipulação avançada de texto
+import importlib.util        # Utilizado para carregar pacotes sob demanda sem importá-los (lazy loading)
 from datetime import datetime # Manipulação de datas e horários (timestamps, comparações de tempo)
 from urllib.parse import urlparse, urljoin  # Parse (análise) e manipulação segura de URLs
 from typing import Dict, Any, Optional # Tipagem estática para melhor documentação e suporte de IDE
@@ -35,7 +36,6 @@ from collections import Counter # Estruturas de dados especializadas (utilizado 
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
 
 
 # --- Versão ---
@@ -46,17 +46,14 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
+# Tentar importar Google Generative AI sob demanda (lazy loading)
+def _is_module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
 
-
-# Tentar importar Google Generative AI
-HAS_GEMINI = False
-try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
-    pass
+HAS_GEMINI = _is_module_available("google.generativeai")
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     """
@@ -67,6 +64,7 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
     if not HAS_GEMINI or not api_key:
         return None
 
+    import google.generativeai as genai
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
@@ -246,6 +244,8 @@ def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
     # Extrair texto do main content seria ideal, mas usaremos do body limpo
     text_content = ' '.join([p.get_text() for p in soup.find_all('p')])
     if text_content:
+        import textstat
+        textstat.set_lang('pt')
         # textstat entende português +- bem para contar sílabas
         score = textstat.flesch_reading_ease(text_content)
         score_data["flesch_score"] = score
@@ -690,7 +690,7 @@ def generate_action_items(data):
     
     # 1. Robots
     robots = d['robots']
-    blocked = [k for k, v in robots['details'].items() if not v]
+    blocked = [k for k, v in robots.get('details', {}).items() if not v]
     if blocked:
         actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
         
@@ -843,6 +843,8 @@ def main():
     except KeyboardInterrupt:
         print("\n\n🛑 Auditoria cancelada pelo usuário.")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"\n{Colors.FAIL}Erro Fatal: {str(e)}{Colors.ENDC}")
 
 if __name__ == "__main__":
