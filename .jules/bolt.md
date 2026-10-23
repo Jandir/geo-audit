@@ -4,3 +4,6 @@
 ## 2025-06-05 - [Python asyncio Pitfall: Concurrency blocked by synchronous CPU tasks]
 **Learning:** If you schedule asynchronous I/O-bound background tasks (`asyncio.create_task`) and immediately follow them with synchronous CPU-bound operations before awaiting them, the tasks may never get a chance to start. The CPU operations block the event loop, forcing sequential execution and destroying performance.
 **Action:** Always add `await asyncio.sleep(0)` explicitly after scheduling background tasks and before executing synchronous blocking logic. This yields control to the event loop, allowing it to start the async tasks so they can run concurrently with the blocking CPU operations.
+## 2025-10-23 - [BeautifulSoup Performance: Cost of str(soup)]
+**Learning:** Calling `str(soup)` on a large BeautifulSoup object is extremely expensive and can be a significant CPU bottleneck. In this codebase, it was used just to calculate the HTML length, taking ~0.4s for moderate pages.
+**Action:** Avoid `str(soup)` when possible. If you need the length of the HTML, use the original byte length of the downloaded content instead.

@@ -53,9 +53,10 @@ textstat.set_lang('pt')
 # Tentar importar Google Generative AI
 HAS_GEMINI = False
 try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
+    import importlib.util
+    if importlib.util.find_spec("google.generativeai"):
+        HAS_GEMINI = True
+except ModuleNotFoundError:
     pass
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
@@ -68,6 +69,11 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
         return None
 
     try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import google.generativeai as genai
+
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
 
@@ -436,7 +442,7 @@ def analyze_entities(soup: BeautifulSoup, target_topic: str = "") -> Dict[str, A
 
 # --- Módulo 6: Main Content (MC) & Ratio ---
 
-def extract_main_content(soup: BeautifulSoup) -> Dict[str, Any]:
+def extract_main_content(soup: BeautifulSoup, html_len: int) -> Dict[str, Any]:
     """Isola Main Content e calcula ratio."""
     # Remover boilerplate
     for tag in soup(['header', 'footer', 'nav', 'aside', 'script', 'style', 'iframe']):
@@ -444,8 +450,6 @@ def extract_main_content(soup: BeautifulSoup) -> Dict[str, Any]:
         
     # Tentar achar <main> ou <article>
     main_tag = soup.find('main') or soup.find('article')
-    
-    html_len = len(str(soup))
     
     if main_tag:
         text_content = main_tag.get_text(strip=True)
@@ -556,8 +560,6 @@ async def analyze_url(url: str):
     # Teoricamente bloqueariam o loop, mas para scripts single-shot é aceitável não usar ProcessPool
     struct_res = analyze_structure_and_readability(soup)
     schema_res = analyze_schema_advanced(soup)
-    mc_res = extract_main_content(soup)
-    ner_res = analyze_entities(soup, intro_topic)
     
     robots_res = await task_robots
     auth_res = await task_auth
@@ -566,6 +568,11 @@ async def analyze_url(url: str):
     # EEAT Básico (Mantido do anterior)
     eeat_res = analyze_eeat_basic(soup)
     
+    ner_res = analyze_entities(soup, intro_topic)
+
+    # extract_main_content mutates the soup, so it must be the last CPU-bound task
+    mc_res = extract_main_content(soup, len(content))
+
     # Page Size
     size_mb = len(content) / (1024 * 1024)
     size_res = {"size_mb": round(size_mb, 2), "is_under_limit": size_mb <= 2.0}
@@ -690,9 +697,12 @@ def generate_action_items(data):
     
     # 1. Robots
     robots = d['robots']
-    blocked = [k for k, v in robots['details'].items() if not v]
-    if blocked:
-        actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
+    if 'details' in robots:
+        blocked = [k for k, v in robots['details'].items() if not v]
+        if blocked:
+            actions.append(f"🤖 Desbloquear bots de IA no robots.txt: {', '.join(blocked)}")
+    elif 'error' in robots:
+        actions.append(f"🤖 Problema ao acessar robots.txt: {robots['error']}")
         
     # 2. Structure
     st = d['structure']
