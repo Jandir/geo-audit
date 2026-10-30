@@ -35,8 +35,8 @@ from collections import Counter # Estruturas de dados especializadas (utilizado 
 
 from bs4 import BeautifulSoup, Tag # Biblioteca principal para parse e navegação em HTML/XML
 # import spacy                  # (Desativado) Processamento de Linguagem Natural (NER, tokens)
-import textstat              # Cálculo de estatísticas de texto (como índice de legibilidade Flesch)
-
+import importlib.util
+import warnings
 
 # --- Versão ---
 VERSION = "2.0.0"
@@ -46,16 +46,13 @@ USER_AGENT = 'Mozilla/5.0 (compatible; GEO-Audit-Bot/2.0)'
 TIMEOUT_SECONDS = 15
 MAX_RETRIES = 2
 
-# Configurar idioma do textstat para português (aproximação)
-textstat.set_lang('pt')
-
 
 # Tentar importar Google Generative AI
 HAS_GEMINI = False
 try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
+    if importlib.util.find_spec("google.generativeai") is not None:
+        HAS_GEMINI = True
+except ModuleNotFoundError:
     pass
 
 def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
@@ -68,6 +65,10 @@ def analyze_with_gemini(data: Dict[str, Any]) -> Optional[str]:
         return None
 
     try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import google.generativeai as genai
+
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash') # Modelo rápido e eficiente
 
@@ -246,6 +247,8 @@ def analyze_structure_and_readability(soup: BeautifulSoup) -> Dict[str, Any]:
     # Extrair texto do main content seria ideal, mas usaremos do body limpo
     text_content = ' '.join([p.get_text() for p in soup.find_all('p')])
     if text_content:
+        import textstat
+        textstat.set_lang('pt')
         # textstat entende português +- bem para contar sílabas
         score = textstat.flesch_reading_ease(text_content)
         score_data["flesch_score"] = score
@@ -436,7 +439,7 @@ def analyze_entities(soup: BeautifulSoup, target_topic: str = "") -> Dict[str, A
 
 # --- Módulo 6: Main Content (MC) & Ratio ---
 
-def extract_main_content(soup: BeautifulSoup) -> Dict[str, Any]:
+def extract_main_content(soup: BeautifulSoup, html_len: int) -> Dict[str, Any]:
     """Isola Main Content e calcula ratio."""
     # Remover boilerplate
     for tag in soup(['header', 'footer', 'nav', 'aside', 'script', 'style', 'iframe']):
@@ -444,8 +447,6 @@ def extract_main_content(soup: BeautifulSoup) -> Dict[str, Any]:
         
     # Tentar achar <main> ou <article>
     main_tag = soup.find('main') or soup.find('article')
-    
-    html_len = len(str(soup))
     
     if main_tag:
         text_content = main_tag.get_text(strip=True)
@@ -556,9 +557,11 @@ async def analyze_url(url: str):
     # Teoricamente bloqueariam o loop, mas para scripts single-shot é aceitável não usar ProcessPool
     struct_res = analyze_structure_and_readability(soup)
     schema_res = analyze_schema_advanced(soup)
-    mc_res = extract_main_content(soup)
     ner_res = analyze_entities(soup, intro_topic)
     
+    # Executar extract_main_content por último pois ele muta o soup (remove tags)
+    mc_res = extract_main_content(soup, len(content))
+
     robots_res = await task_robots
     auth_res = await task_auth
     link_audit_res = await task_links
